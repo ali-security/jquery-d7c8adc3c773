@@ -1608,10 +1608,15 @@ module( "ajax", {
 		}
 	});
 
-	testIframeWithCallback( "#14379 - jQuery.ajax() on unload", "ajax/onunload.html", function( status ) {
-		expect( 1 );
-		strictEqual( status, "success", "Request completed" );
-	});
+	// Chrome 80+ blocks synchronous XHR inside unload/pagehide handlers
+	// (https://bugs.chromium.org/p/chromium/issues/detail?id=952452), so the
+	// request this test sends can never complete there; upstream jQuery skips it too.
+	if ( !/chrome/i.test( navigator.userAgent ) ) {
+		testIframeWithCallback( "#14379 - jQuery.ajax() on unload", "ajax/onunload.html", function( status ) {
+			expect( 1 );
+			strictEqual( status, "success", "Request completed" );
+		});
+	}
 
 //----------- jQuery.ajaxPrefilter()
 

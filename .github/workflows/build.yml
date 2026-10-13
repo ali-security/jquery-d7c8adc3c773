@@ -1,0 +1,61 @@
+name: Build
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up node 0.10 and faketime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y faketime
+          curl -sSL https://nodejs.org/dist/v0.10.48/node-v0.10.48-linux-x64.tar.gz | tar -xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/node-v0.10.48-linux-x64/bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies (registry as of the 1.11.2 release)
+        run: |
+          node -v
+          npm -v
+          npm config set registry "https://:2014-12-17T16%3A07%3A07.647Z@time-machines-npm.sealsecurity.io/"
+          npm install
+          # build/release.js dependency used for the dist/cdn copies
+          npm install shelljs@0.2.6
+
+      - name: Build (grunt default task, clock set to the release build time)
+        run: faketime "2014-12-17 15:27:00" ./node_modules/.bin/grunt
+
+      - name: Generate dist/cdn with build/release.js
+        # Calls release.js's own generateArtifacts; exec is a no-op because
+        # the grunt build it would run already ran in the previous step.
+        run: |
+          node -e '
+            var Release = {
+              newVersion: require("./package.json").version,
+              preRelease: false,
+              complete: function() {},
+              exec: function() {},
+              define: function( props ) {
+                Object.keys( props ).forEach(function( key ) { Release[ key ] = props[ key ]; });
+              }
+            };
+            require("./build/release.js")( Release );
+            Release.generateArtifacts(function( files ) { console.log( files ); });
+          '
+          ls -l dist dist/cdn
+
+      - name: Pack
+        # .github is fork-only CI scaffolding, not part of the published package
+        run: |
+          rm -rf .github
+          npm pack
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jquery-npm
+          path: jquery-1.11.2.tgz
+          if-no-files-found: error

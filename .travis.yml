@@ -1,3 +1,40 @@
 language: node_js
 node_js:
 - '0.10'
+addons:
+  apt:
+    packages:
+    # Apache + mod_php serve test/data/*.php for the ajax tests (php -S queues
+    # requests behind core's dont_return.php, which sleeps for 30s)
+    - apache2
+    - libapache2-mod-php
+    # Shared libraries for puppeteer's headless Chrome
+    - libnss3
+    - libatk-bridge2.0-0
+    - libgbm1
+    - libxkbcommon0
+    - libgtk-3-0
+    - libasound2
+    - libxss1
+    - libxcomposite1
+    - libxdamage1
+    - libxrandr2
+    - libpango-1.0-0
+    - libcups2
+    - fonts-liberation
+script:
+# Build + lint (grunt default task) under node 0.10
+- npm test
+# QUnit browser suite (test/index.html) in headless Chrome. The runner needs a
+# newer node, switched to only after the node 0.10 build above.
+- sudo rm -f /var/www/html/index.html
+- sudo cp -r test dist /var/www/html/
+- sudo service apache2 restart
+- curl -sSf "http://localhost/test/data/name.php?name=foo"
+- nvm install 18.20.4
+- PUPPETEER_SKIP_DOWNLOAD=1 npm install --prefix "$HOME/qunit-runner" --no-audit --no-fund puppeteer-core@21.11.0
+# Chrome for Testing 121 (the build puppeteer 21.11.0 pins), fetched directly:
+# puppeteer's own downloader takes ~9 minutes on Travis
+- curl -fL --retry 3 -o "$HOME/chrome-linux64.zip" https://storage.googleapis.com/chrome-for-testing-public/121.0.6167.85/linux64/chrome-linux64.zip
+- unzip -q -d "$HOME" "$HOME/chrome-linux64.zip"
+- CHROME_BIN="$HOME/chrome-linux64/chrome" NODE_PATH="$HOME/qunit-runner/node_modules" node test/run-headless.js http://localhost/test/index.html
